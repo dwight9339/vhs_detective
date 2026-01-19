@@ -1,0 +1,8 @@
+frame:0 pts:0 pts_time:0.000000
+YAVG=12.5
+ZMAX=1
+
+frame:1 pts:1 pts_time:0.040000
+YAVG=13.0
+key=not_a_number
+XMIN=0.5
