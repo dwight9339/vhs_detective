@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import List, Optional, Sequence
 
-from ..detect import baseline as baseline_detect
+from ..detect import audio as audio_detect
+from ..detect import video as video_detect
 from ..models.anomaly import AnalysisResult, Region
 from ..models.core import CTLPulse, FrameStats
 
@@ -17,9 +18,9 @@ def run_analysis(
     """Run all detectors across available data sources."""
 
     regions: List[Region] = []
-    regions.extend(baseline_detect.detect_video_dark_regions(video_frames))
+    regions.extend(video_detect.detect_video_dark_regions(video_frames))
     if audio_frames:
-        regions.extend(baseline_detect.detect_audio_silence_regions(audio_frames))
+        regions.extend(audio_detect.detect_audio_silence_regions(audio_frames))
 
     # Future: add CTL + fusion detectors here
     regions.sort(key=lambda region: region.start_time)
