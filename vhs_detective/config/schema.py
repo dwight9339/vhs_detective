@@ -1,8 +1,18 @@
 """Configuration dataclasses for VHS Detective."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
+
+
+@dataclass(frozen=True)
+class CTLConfig:
+    """Controls how CTL captures are parsed."""
+
+    sample_rate_hz: Optional[int] = None
+    min_pulse_samples: int = 5
+    pulse_level: int = 0
 
 
 @dataclass(frozen=True)
@@ -11,3 +21,4 @@ class AnalysisConfig:
 
     base: str
     working_dir: Path
+    ctl: CTLConfig = field(default_factory=CTLConfig)

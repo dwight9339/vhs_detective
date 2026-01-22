@@ -16,11 +16,41 @@ class FrameStats:
 
 @dataclass
 class CTLPulse:
-    """Single CTL pulse observation."""
+    """Single CTL pulse observation.
+
+    Historically CTL pulses were represented just by a timestamp (`t`) and an
+    optional duration (`dt`).  As we start parsing raw logic captures we also
+    track which logic level was considered the pulse, plus the run-length
+    metadata derived from the original sample stream.
+    """
 
     t: float
     dt: Optional[float]
     idx: int
+    level: int = 0
+    start_sample: Optional[int] = None
+    sample_count: Optional[int] = None
+    sample_rate_hz: Optional[int] = None
+
+    @property
+    def start_time(self) -> float:
+        """Alias for code that expects `t` to hold the pulse start time."""
+
+        return self.t
+
+    @property
+    def duration(self) -> Optional[float]:
+        """Alias for `dt` (kept for clarity in the new parser context)."""
+
+        return self.dt
+
+    @property
+    def end_time(self) -> Optional[float]:
+        """Convenience accessor for downstream detectors."""
+
+        if self.dt is None:
+            return None
+        return self.t + self.dt
 
 
 @dataclass
