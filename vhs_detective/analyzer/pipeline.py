@@ -6,7 +6,7 @@ from typing import List, Optional, Sequence
 from ..detect import audio as audio_detect
 from ..detect import video as video_detect
 from ..models.anomaly import AnalysisResult, Region
-from ..models.core import CTLPulse, FrameStats
+from ..models.core import CTLPulse, DetectionToggles, FrameStats
 
 
 def run_analysis(
@@ -14,20 +14,33 @@ def run_analysis(
     video_frames: Sequence[FrameStats],
     audio_frames: Optional[Sequence[FrameStats]] = None,
     ctl_pulses: Optional[Sequence[CTLPulse]] = None,
+    video_lock_time_override: Optional[float] = None,
+    detection: Optional[DetectionToggles] = None,
 ) -> AnalysisResult:
     """Run all detectors across available data sources."""
 
-    lock_time = video_detect.estimate_video_lock_time(video_frames)
-    _align_ctl_to_video(video_frames, ctl_pulses, lock_time=lock_time)
+    toggles = detection or DetectionToggles()
+    has_ctl_data = bool(ctl_pulses)
+    should_estimate_lock = toggles.video or toggles.ctl or has_ctl_data
+    if video_lock_time_override is not None:
+        lock_time = video_lock_time_override
+    elif should_estimate_lock:
+        lock_time = video_detect.estimate_video_lock_time(video_frames)
+    else:
+        lock_time = None
+
+    if ctl_pulses:
+        _align_ctl_to_video(video_frames, ctl_pulses, lock_time=lock_time)
 
     regions: List[Region] = []
-    regions.extend(video_detect.detect_video_dark_regions(video_frames))
-    regions.extend(video_detect.detect_video_bright_regions(video_frames))
-    regions.extend(video_detect.detect_video_freeze_regions(video_frames))
-    regions.extend(video_detect.detect_video_dropframe_gaps(video_frames))
-    regions.extend(video_detect.detect_video_chroma_dropouts(video_frames))
-    regions.extend(video_detect.detect_video_noise_spikes(video_frames))
-    if audio_frames:
+    if toggles.video:
+        regions.extend(video_detect.detect_video_dark_regions(video_frames))
+        regions.extend(video_detect.detect_video_bright_regions(video_frames))
+        regions.extend(video_detect.detect_video_freeze_regions(video_frames))
+        regions.extend(video_detect.detect_video_dropframe_gaps(video_frames))
+        regions.extend(video_detect.detect_video_chroma_dropouts(video_frames))
+        regions.extend(video_detect.detect_video_noise_spikes(video_frames))
+    if toggles.audio and audio_frames:
         regions.extend(audio_detect.detect_audio_silence_regions(audio_frames))
 
     # Future: add CTL + fusion detectors here

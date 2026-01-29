@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from ..models.core import DetectionToggles
+
 
 @dataclass(frozen=True)
 class CTLConfig:
@@ -21,4 +23,6 @@ class AnalysisConfig:
 
     base: str
     working_dir: Path
+    detection: DetectionToggles = field(default_factory=DetectionToggles)
+    video_lock_time_override: Optional[float] = None
     ctl: CTLConfig = field(default_factory=CTLConfig)

@@ -62,3 +62,12 @@ class Inputs:
     ctl_csv: Optional[Path]
     video_stats: Path
     audio_stats: Optional[Path]
+
+
+@dataclass(frozen=True)
+class DetectionToggles:
+    """Toggle individual detector families on/off."""
+
+    video: bool = True
+    audio: bool = True
+    ctl: bool = True

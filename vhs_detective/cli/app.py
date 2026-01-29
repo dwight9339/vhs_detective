@@ -4,20 +4,21 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from typing import List, Sequence
+from typing import List, Sequence, Set
 
 from ..analyzer.pipeline import run_analysis
 from ..config.schema import AnalysisConfig, CTLConfig
 from ..ctl import parser as ctl_parser
 from ..ffmpeg.commands import which_or_die
 from ..fs.discovery import discover_inputs, ensure_stats
-from ..models.core import CTLPulse
+from ..models.core import CTLPulse, DetectionToggles
 from ..report.anomalies import write_analysis_json
 from ..report.summary import write_text_summary
 from ..stats.audio import parse_audio_stats
 from ..stats.video import parse_video_stats
 
 _VIDEO_EXTENSIONS = ('.mkv',)
+_DETECTION_TARGETS = ('video', 'audio', 'ctl')
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,6 +40,22 @@ def build_parser() -> argparse.ArgumentParser:
         '--log-level',
         default='INFO',
         help='Logging level (DEBUG, INFO, WARNING, ...)',
+    )
+    parser.add_argument(
+        '--detect',
+        dest='detect_targets',
+        action='append',
+        metavar='TARGETS',
+        help=(
+            'Restrict detector families (video, audio, ctl). '
+            'Provide multiple --detect flags or comma-separated values; defaults to all.'
+        ),
+    )
+    parser.add_argument(
+        '--video-lock-time',
+        type=_parse_lock_time,
+        default=None,
+        help='Manually specify the video lock start time (seconds or HH:MM:SS.mmm).',
     )
     parser.add_argument(
         '--ctl-sample-rate',
@@ -75,13 +92,26 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
     ffmpeg_exe = which_or_die('ffmpeg')
     ffprobe_exe = which_or_die('ffprobe')
 
+    detect_cfg = _build_detection_toggles(args.detect_targets)
     ctl_cfg = CTLConfig(
         sample_rate_hz=args.ctl_sample_rate,
         min_pulse_samples=args.ctl_min_pulse_samples,
         pulse_level=args.ctl_pulse_level,
     )
-    cfg = AnalysisConfig(base=base, working_dir=workdir, ctl=ctl_cfg)
+    cfg = AnalysisConfig(
+        base=base,
+        working_dir=workdir,
+        detection=detect_cfg,
+        video_lock_time_override=args.video_lock_time,
+        ctl=ctl_cfg,
+    )
     logger.debug('Analysis config: %s', cfg)
+    logger.info(
+        'Detectors enabled | video=%s audio=%s ctl=%s',
+        'ON' if cfg.detection.video else 'OFF',
+        'ON' if cfg.detection.audio else 'OFF',
+        'ON' if cfg.detection.ctl else 'OFF',
+    )
 
     inputs = discover_inputs(cfg.base, cfg.working_dir)
     inputs = ensure_stats(inputs, ffmpeg_exe, ffprobe_exe)
@@ -104,6 +134,8 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         video_frames=video_frames,
         audio_frames=audio_frames,
         ctl_pulses=ctl_pulses,
+        video_lock_time_override=cfg.video_lock_time_override,
+        detection=cfg.detection,
     )
     logger.info('Detected %d anomaly region(s)', len(analysis.regions))
     _log_next_steps(
@@ -112,7 +144,13 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         audio_frames_count=len(audio_frames or []),
         ctl_count=len(ctl_pulses or []),
     )
-    if analysis.video_lock_time is not None:
+    has_ctl_data = bool(ctl_pulses)
+    should_estimate_lock = cfg.detection.video or cfg.detection.ctl or has_ctl_data
+    if cfg.video_lock_time_override is not None:
+        logger.info('Video lock override provided: %.3f s', cfg.video_lock_time_override)
+    elif not should_estimate_lock:
+        logger.info('Video lock estimation skipped (video/CTL detectors disabled and no CTL capture).')
+    elif analysis.video_lock_time is not None:
         logger.info('Video lock detected at %.3f s', analysis.video_lock_time)
     else:
         logger.info('Video lock time could not be determined from the stats.')
@@ -197,3 +235,53 @@ def _auto_detect_base(workdir: Path) -> str:
             )
         )
     return Path(candidates[0]).stem
+
+
+def _build_detection_toggles(raw_targets: Sequence[str] | None) -> DetectionToggles:
+    if not raw_targets:
+        return DetectionToggles()
+    selected: Set[str] = set()
+    for chunk in raw_targets:
+        for value in chunk.split(','):
+            normalized = value.strip().lower()
+            if not normalized:
+                continue
+            if normalized not in _DETECTION_TARGETS:
+                choices = ', '.join(_DETECTION_TARGETS)
+                raise SystemExit(f"Unknown detection target '{value}'. Choose from: {choices}.")
+            selected.add(normalized)
+    if not selected:
+        raise SystemExit('At least one detection target must be specified when using --detect.')
+    return DetectionToggles(
+        video='video' in selected,
+        audio='audio' in selected,
+        ctl='ctl' in selected,
+    )
+
+
+def _parse_lock_time(value: str) -> float:
+    stripped = value.strip()
+    if not stripped:
+        raise argparse.ArgumentTypeError('Video lock time must be non-empty.')
+    try:
+        return float(stripped)
+    except ValueError:
+        pass
+
+    sign = -1.0 if stripped.startswith('-') else 1.0
+    work = stripped[1:] if sign < 0 else stripped
+    parts = work.split(':')
+    if len(parts) not in (2, 3):
+        raise argparse.ArgumentTypeError(
+            f"Invalid time format '{value}'. Use seconds or HH:MM:SS.mmm."
+        )
+    try:
+        seconds = float(parts[-1])
+        minutes = int(parts[-2])
+        hours = int(parts[-3]) if len(parts) == 3 else 0
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"Invalid numeric component in '{value}'."
+        ) from exc
+    total = hours * 3600 + minutes * 60 + seconds
+    return sign * total
