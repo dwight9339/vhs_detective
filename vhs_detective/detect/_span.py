@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from statistics import median
-from typing import Callable, Iterable, List, Sequence, Tuple
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 from ..models.anomaly import Evidence, Region
 from ..models.core import FrameStats
@@ -14,6 +14,7 @@ def detect_span_regions(
     *,
     frames: Sequence[FrameStats],
     metric: str,
+    value_getter: Callable[[FrameStats], Optional[float]],
     predicate: Callable[[float], bool],
     min_duration: float,
     source: str,
@@ -25,7 +26,7 @@ def detect_span_regions(
     """Convert qualifying metric spans into anomaly regions."""
 
     regions: List[Region] = []
-    for span in iter_metric_spans(frames, metric=metric, predicate=predicate):
+    for span in iter_value_spans(frames, value_getter=value_getter, predicate=predicate):
         start_time = span[0][0].pts_time
         end_time = span[-1][0].pts_time + frame_step
         if end_time <= start_time:
@@ -53,17 +54,17 @@ def detect_span_regions(
     return regions
 
 
-def iter_metric_spans(
+def iter_value_spans(
     frames: Sequence[FrameStats],
     *,
-    metric: str,
+    value_getter: Callable[[FrameStats], Optional[float]],
     predicate: Callable[[float], bool],
 ) -> Iterable[MetricSpan]:
     """Yield contiguous spans where `predicate(frame[metric])` holds true."""
 
     current: MetricSpan = []
     for frame in frames:
-        value = frame.kv.get(metric)
+        value = value_getter(frame)
         if value is None or not predicate(value):
             if current:
                 yield current
@@ -93,3 +94,9 @@ def min_by_value(span: Sequence[Tuple[FrameStats, float]]) -> Tuple[FrameStats, 
     """Return the (frame, value) tuple with the lowest metric value."""
 
     return min(span, key=lambda item: item[1])
+
+
+def max_by_value(span: Sequence[Tuple[FrameStats, float]]) -> Tuple[FrameStats, float]:
+    """Return the (frame, value) tuple with the highest metric value."""
+
+    return max(span, key=lambda item: item[1])

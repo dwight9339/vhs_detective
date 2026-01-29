@@ -17,8 +17,16 @@ def run_analysis(
 ) -> AnalysisResult:
     """Run all detectors across available data sources."""
 
+    lock_time = video_detect.estimate_video_lock_time(video_frames)
+    _align_ctl_to_video(video_frames, ctl_pulses, lock_time=lock_time)
+
     regions: List[Region] = []
     regions.extend(video_detect.detect_video_dark_regions(video_frames))
+    regions.extend(video_detect.detect_video_bright_regions(video_frames))
+    regions.extend(video_detect.detect_video_freeze_regions(video_frames))
+    regions.extend(video_detect.detect_video_dropframe_gaps(video_frames))
+    regions.extend(video_detect.detect_video_chroma_dropouts(video_frames))
+    regions.extend(video_detect.detect_video_noise_spikes(video_frames))
     if audio_frames:
         regions.extend(audio_detect.detect_audio_silence_regions(audio_frames))
 
@@ -30,4 +38,30 @@ def run_analysis(
         video_frames=video_frames,
         audio_frames=audio_frames,
         ctl_pulses=ctl_pulses,
+        video_lock_time=lock_time,
     )
+
+
+def _align_ctl_to_video(
+    video_frames: Sequence[FrameStats],
+    ctl_pulses: Optional[Sequence[CTLPulse]],
+    *,
+    lock_time: Optional[float],
+) -> None:
+    """Shift CTL pulse timestamps so the first pulse lines up with video start.
+
+    Field captures often begin slightly before/after FFmpeg stats logging.
+    We now estimate the first usable video timestamp (color burst or the first
+    luma-rich frame after a blank run) and anchor the CTL pulses to that point.
+    """
+
+    if not video_frames or not ctl_pulses:
+        return
+
+    anchor_pts = lock_time if lock_time is not None else video_frames[0].pts_time
+    first_ctl_start = ctl_pulses[0].start_time
+    offset = anchor_pts - first_ctl_start
+    if offset == 0.0:
+        return
+    for pulse in ctl_pulses:
+        pulse.t += offset

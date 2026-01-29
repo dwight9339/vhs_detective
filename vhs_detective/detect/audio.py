@@ -22,6 +22,7 @@ def detect_audio_silence_regions(
     return _span.detect_span_regions(
         frames=frames,
         metric='RMS_level',
+        value_getter=lambda frame: frame.kv.get('RMS_level'),
         predicate=lambda value: value <= rms_threshold,
         min_duration=min_duration,
         source='audio',

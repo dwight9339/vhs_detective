@@ -12,6 +12,8 @@ from ..ctl import parser as ctl_parser
 from ..ffmpeg.commands import which_or_die
 from ..fs.discovery import discover_inputs, ensure_stats
 from ..models.core import CTLPulse
+from ..report.anomalies import write_analysis_json
+from ..report.summary import write_text_summary
 from ..stats.audio import parse_audio_stats
 from ..stats.video import parse_video_stats
 
@@ -110,6 +112,19 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         audio_frames_count=len(audio_frames or []),
         ctl_count=len(ctl_pulses or []),
     )
+    if analysis.video_lock_time is not None:
+        logger.info('Video lock detected at %.3f s', analysis.video_lock_time)
+    else:
+        logger.info('Video lock time could not be determined from the stats.')
+
+    summary_path = cfg.working_dir / f"{cfg.base}_analysis.txt"
+    write_text_summary(summary_path, analysis, base_name=cfg.base)
+    logger.info('Wrote analysis summary to %s', summary_path.name)
+
+    json_path = cfg.working_dir / f"{cfg.base}_analysis.json"
+    write_analysis_json(json_path, analysis, base_name=cfg.base)
+    logger.info('Wrote analysis JSON to %s', json_path.name)
+
     return 0
 
 

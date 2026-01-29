@@ -36,3 +36,4 @@ class AnalysisResult:
     video_frames: Sequence[FrameStats]
     audio_frames: Optional[Sequence[FrameStats]] = None
     ctl_pulses: Optional[Sequence[CTLPulse]] = None
+    video_lock_time: Optional[float] = None

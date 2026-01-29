@@ -143,9 +143,11 @@ def ffprobe_audio_sample_rate(ffprobe_exe: str, video_path: Path) -> Optional[in
 
 
 def generate_video_stats(ffmpeg_exe: str, ffprobe_exe: str, video_path: Path, out_stats: Path) -> None:
+    """Emit per-frame video metrics via signalstats."""
+
     duration_s = ffprobe_duration_seconds(ffprobe_exe, video_path)
     devnull = _ffmpeg_null_device()
-    out_file_for_filter = out_stats.name if os.name == "nt" else str(out_stats)
+    metadata_target = out_stats.name if os.name == "nt" else str(out_stats)
     cmd = [
         ffmpeg_exe,
         "-hide_banner",
@@ -154,7 +156,7 @@ def generate_video_stats(ffmpeg_exe: str, ffprobe_exe: str, video_path: Path, ou
         str(video_path),
         "-an",
         "-vf",
-        f"signalstats,metadata=print:file={out_file_for_filter}",
+        f"signalstats,metadata=print:file={metadata_target}",
         "-f",
         "null",
         devnull,
