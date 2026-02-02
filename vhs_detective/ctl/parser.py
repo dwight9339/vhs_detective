@@ -9,7 +9,7 @@ from typing import Iterator, List, Optional, TextIO
 
 from ..models.core import CTLPulse
 
-DEFAULT_SAMPLE_RATE_HZ = 100_000_000
+DEFAULT_SAMPLE_RATE_HZ = 100_000
 _RAW_HEADERS = {"logic", "level"}
 RAW_CAPTURE = "raw_logic_capture"
 AGGREGATE_CSV = "aggregate_csv"
@@ -122,7 +122,7 @@ def stream_raw_ctl_pulses(
     min_pulse_samples: int = 1,
     max_samples: Optional[int] = None,
 ) -> Iterator[CTLPulse]:
-    """Stream CTLPulse objects from a raw logic CSV (e.g. 100 MHz captures)."""
+    """Stream CTLPulse objects from a raw logic CSV (e.g. 100 kHz captures)."""
 
     if min_pulse_samples < 1:
         raise ValueError("min_pulse_samples must be >= 1")

@@ -163,6 +163,26 @@ def test_run_analysis_aligns_ctl_with_video_detectors_off() -> None:
     assert result.ctl_pulses[0].t == pytest.approx(lock_time)
 
 
+def test_run_analysis_emits_ctl_regions_when_enabled() -> None:
+    step = 1 / 30.0
+    ctl = [
+        _pulse(0.0, idx=0),
+        _pulse(step, idx=1),
+        _pulse(step * 2, idx=2),
+        _pulse(step * 3 + 0.35, idx=3),
+        _pulse(step * 4 + 0.35, idx=4),
+    ]
+
+    result = run_analysis(
+        video_frames=[],
+        ctl_pulses=ctl,
+        detection=DetectionToggles(video=False, audio=False, ctl=True),
+    )
+
+    kinds = {region.kind for region in result.regions}
+    assert any(kind.startswith('ctl.') for kind in kinds)
+
+
 def test_run_analysis_aligns_ctl_even_when_ctl_detection_disabled() -> None:
     video = []
     step = 1 / 30.0
@@ -205,6 +225,7 @@ def test_run_analysis_aligns_ctl_even_when_ctl_detection_disabled() -> None:
     lock_time = video[6].pts_time
     assert result.video_lock_time == pytest.approx(lock_time)
     assert result.ctl_pulses[0].t == pytest.approx(lock_time)
+    assert not any(region.kind.startswith('ctl.') for region in result.regions)
 
 
 def test_run_analysis_honors_manual_lock_override() -> None:
